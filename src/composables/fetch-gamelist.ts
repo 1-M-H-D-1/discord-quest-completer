@@ -5,6 +5,7 @@ import { ref, watch } from 'vue';
 import { message } from '@tauri-apps/plugin-dialog'; 
 import { invoke } from '@tauri-apps/api/core';
 import { useGlobalState } from './app-state';
+import { mergeCatalogs, validCatalog } from '@/services/game-catalog';
 
 export function useFetchGameList() {
     const { addLog } = useGlobalState();
@@ -62,10 +63,6 @@ export function useFetchGameList() {
 
     const allFetchDone = ref(false);
 
-    function isValidGameList(data: any): boolean {
-        return Array.isArray(data) && data[0] && 'aliases' in data[0] && 'name' in data[0] && 'executables' in data[0];
-    }
-
     watch(() => isReadyGH.value, async (newVal) => {
         addLog('debug','isReadyGH: ' + newVal); 
     });
@@ -82,52 +79,15 @@ export function useFetchGameList() {
     async function fetchGameList() { 
         allFetchDone.value = false;
         addLog('Fetching game list...');
-        // try fetching from the Github mirror first, then Discord. Use bundled as fallback.
-        try {
-           await Promise.all([executeGH(), executeBundled()]);
-        } catch {
-            addLog('error', 'Error executing fetch for GitHub mirror or bundled game list.');
+        fetchError.value = null;
+        await Promise.all([executeDiscord(), executeGH(), executeBundled()]);
+        gameDB.value = mergeCatalogs(gameListFromDiscord.value, gameListGHMirror.value,
+            validCatalog(bundledGameList.value) ? bundledGameList.value : []);
+        if (!validCatalog(gameListFromDiscord.value) || !validCatalog(gameListGHMirror.value)) {
+            fetchError.value = 'One or both live catalogs are unavailable. Refetch before using automatic Steam discovery.';
+            addLog('warning', fetchError.value);
         }
-
-        if (errorGH.value) { 
-            fetchError.value = 'Error fetching game list from GitHub mirror.';
-            addLog('error','Error fetching game list from GitHub mirror');
-            await executeDiscord();
-            if (errorDiscord.value) {
-                fetchError.value = 'Error fetching game list from Discord.';
-                addLog('error','Error fetching game list from Discord:');
-                if (errorBundled.value) {
-                    fetchError.value = 'Error fetching bundled game list.';
-                    addLog('error','Error fetching bundled game list:');
-                }
-            }
-        }
-        // silently log error for bundled, as it's the last resort.
-        if (errorBundled.value) {
-            addLog('error','Error fetching bundled game list');
-        }
-
-        if (fetchError.value) {
-            await message('There was an error fetching the latest game list.' + fetchError.value, {
-                title: 'Game List Fetch Error',
-                kind: 'error',
-                buttons: {
-                    ok: 'OK'
-                }
-            });
-        }
-
-        if (gameListGHMirror.value && gameListGHMirror.value?.length > 0 && isValidGameList(gameListGHMirror.value)) {
-            gameDB.value = gameListGHMirror.value as Game[] || [];
-            addLog('Using game list from GitHub mirror. ' + gameListGHMirror.value.length + ' entries.');
-        } else if (gameListFromDiscord.value && gameListFromDiscord.value?.length > 0 && isValidGameList(gameListFromDiscord.value)) {
-            gameDB.value = gameListFromDiscord.value as Game[] || [];
-            addLog('Using game list from Discord. ' + gameListFromDiscord.value.length + ' entries.');
-        } else {
-            // bundled is always present.
-            addLog('Using bundled game list as fallback.' + bundledGameList.value.length + ' entries.');
-            gameDB.value = bundledGameList.value;
-        }
+        addLog('Loaded ' + gameDB.value.length + ' games; merged executables from both live catalogs.');
 
         // Set a timeout to delay setting allFetchDone to true, to allow UI to update.
       

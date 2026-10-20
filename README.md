@@ -121,6 +121,47 @@ The dummy game executale files used by this program are placed in a folder calle
 - Set custom activity status from supported games
 - Linux and MacOS support (if possible) -->
 
+## Steam fallback and manual game details
+
+The app checks both Discord's detectable-games catalog and the GitHub mirror.
+If neither supplies a Windows executable, the game panel offers manual fields:
+Steam app ID, game name, installation folder name, and relative EXE path.
+Known IDs and game names are prefilled. Steam launch metadata can also prefill
+folder and executable details where available. No per-game values are hardcoded.
+
+Manual entry works even if the catalogs or Steam metadata service are unavailable.
+Click **Save manual details** to validate and save an entry separately for that
+Discord game. Backslashes in relative EXE paths are normalized. Absolute paths,
+parent traversal, device names, launcher URLs, and non-EXE files are rejected.
+Saved details are restored when you select the game again. Unsaved edits are not
+used to create runners, and existing setups must be removed before editing their
+saved details.
+
+1. Select a game without a detected Windows executable.
+2. Enter or check its Steam app ID and name, the folder name inside steamapps/common,
+   and its EXE path inside that folder. Save the details.
+3. Exit Steam, select a Steam library folder containing steamapps, and choose
+   **Set up Steam fallback**.
+4. Restart Steam and Discord, then choose **Launch Steam runner**.
+5. Stop the runner and exit Steam before **Remove Steam fallback**.
+
+The automatic launch-metadata lookup uses the community SteamCMD API
+(https://www.steamcmd.net/), not a Valve-hosted Web API. If it returns only a
+launcher URL, the executable must be entered manually. Depot lookups, manifest
+import, and DepotDownloader are no longer part of this build.
+
+Only the bundled dummy runner, minimal Steam manifest, and ownership record are
+created. Existing game files are not overwritten. Removal refuses changed files.
+Discord recognition and Quest progress remain unverified.
+
+This Steam fallback currently supports Windows only. It uses the repository's
+bundled Windows runner (resources/src-win.exe, or data/src-win.exe in older portable
+builds). No additional helper is needed.
+Older per-game builds use different ownership markers: use the version that
+created those setups to remove them first.
+
+Validation: pnpm test; cargo test --manifest-path src-tauri/Cargo.toml --lib steam_.
+
 ## :heart: Support :heart:
 
 

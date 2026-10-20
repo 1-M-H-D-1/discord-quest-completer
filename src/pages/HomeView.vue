@@ -9,7 +9,9 @@ import { GameActionsProvider, GameExecutable, type Game } from '@/types/types';
 import IconVerified from '@/components/IconVerified.vue';
 import { isEmpty } from 'lodash-es';
 import GameExecutables from '@/components/GameExecutables.vue';
-import { GameActionsKey } from '@/constants/constants';
+import SteamFallback from '@/components/SteamFallback.vue';
+import { hasWindowsExecutable } from '@/services/game-catalog';
+import { GameActionsKey, getCurrentOS, EXECUTABLE_OS } from '@/constants/constants';
 import { path } from '@tauri-apps/api';
 import { emit } from '@tauri-apps/api/event';
 import { useFetchGameList } from '@/composables/fetch-gamelist';
@@ -658,6 +660,7 @@ provide<GameActionsProvider>(GameActionsKey, {
                         @stop="stopPlaying"
                         @install_and_play="installAndPlay"
                     />
+                    <SteamFallback v-if="getCurrentOS() === EXECUTABLE_OS.WINDOWS && selectedGame && !hasWindowsExecutable(selectedGame)" :key="selectedGame.id" :game="selectedGame" />
 
                     <!-- <button @click="playGame(selectedGame)" :disabled="!canPlayGame(selectedGame)"
                         class="w-full py-2 rounded-lg" :class="[

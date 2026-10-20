@@ -8,6 +8,8 @@ use tauri::{path::BaseDirectory, AppHandle, Emitter, Listener, Manager};
 
 mod rpc;
 mod runner;
+mod steam_fallback;
+mod steam_metadata;
 
 // Global static instance of the Discord client
 static DISCORD_CLIENT: OnceCell<Mutex<Option<rpc::Client>>> = OnceCell::new();
@@ -423,21 +425,31 @@ fn connect_to_discord_rpc_3(handle: AppHandle, activity_json: String, action: St
     });
 }
 
-#[tauri::command(rename_all = "snake_case")]
-async fn fetch_gamelist_gh_mirror() -> tauri::ipc::Response {
-    let res = tauri_plugin_http::reqwest::get("https://markterence.github.io/discord-quest-completer/detectable.json").await;
-    tauri::ipc::Response::new(res.unwrap().text().await.unwrap())
+#[tauri::command]
+async fn fetch_gamelist_gh_mirror() -> Result<tauri::ipc::Response, String> {
+    fetch_catalog("https://markterence.github.io/discord-quest-completer/detectable.json").await
 }
-
-#[tauri::command(rename_all = "snake_case")]
-async fn fetch_gamelist_from_discord() -> tauri::ipc::Response {
-    let res = tauri_plugin_http::reqwest::get("https://discord.com/api/applications/detectable").await;
-    tauri::ipc::Response::new(res.unwrap().text().await.unwrap())
+#[tauri::command]
+async fn fetch_gamelist_from_discord() -> Result<tauri::ipc::Response, String> {
+    fetch_catalog("https://discord.com/api/applications/detectable").await
+}
+async fn fetch_catalog(url: &str) -> Result<tauri::ipc::Response, String> {
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(25))
+        .build().map_err(|e| e.to_string())?;
+    let response = client.get(url).send().await.map_err(|e| e.to_string())?
+        .error_for_status().map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(response.text().await.map_err(|e| e.to_string())?))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(steam_fallback::SteamRunner::default())
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                window.state::<steam_fallback::SteamRunner>().shutdown();
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
@@ -448,7 +460,10 @@ pub fn run() {
             connect_to_discord_rpc_3,
             run_background_process,
             fetch_gamelist_gh_mirror,
-            fetch_gamelist_from_discord
+            fetch_gamelist_from_discord,
+            steam_fallback::steam_fallback_action,
+            steam_metadata::fetch_steam_metadata,
+            steam_metadata::validate_manual_steam_plan
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

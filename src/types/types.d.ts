@@ -14,6 +14,8 @@ export interface Game {
     id: string;
     name: string;
     executables: GameExecutable[];
+    third_party_skus?: { distributor: string; id: string | null }[];
+    steam_catalog_checked?: boolean;
     aliases?: string[];
     themes?: string[];
     is_running?: boolean;
